@@ -16,12 +16,12 @@ st.set_page_config(
 # -----------------------------
 @st.cache_data
 def load_data():
-    df = pd.read_csv("data/final_churn_dataset.csv", index_col=0)
+    df = pd.read_csv("C:/Projects/09_Customer_churn_predictor/data/final_churn_dataset.csv", index_col=0)
     return df
 
 @st.cache_resource
 def load_model():
-    model = joblib.load("models/random_forest_model.pkl")
+    model = joblib.load("C:/Projects/09_Customer_churn_predictor/notebooks/models/random_forest_model.pkl")
     return model
 
 df = load_data()
