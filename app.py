@@ -4,204 +4,152 @@ import matplotlib.pyplot as plt
 import joblib
 
 # -----------------------------
-# Page Config
+# Page Config (Minimalist & Wide)
 # -----------------------------
-st.set_page_config(page_title="Customer Churn Prediction", layout="wide")
+st.set_page_config(page_title="Customer Churn Intelligence", layout="wide")
+
+# Custom CSS for a cleaner look
+st.markdown("""
+    <style>
+    .main { background-color: #fcfcfc; }
+    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; border: 1px solid #f0f0f0; }
+    </style>
+    """, unsafe_index=True)
 
 # -----------------------------
 # Load Data and Model
 # -----------------------------
 @st.cache_data
 def load_data():
+    # Update these to relative paths for easier deployment later!
     return pd.read_csv("data/final_churn_dataset.csv", index_col=0)
 
 @st.cache_resource
 def load_model():
-    return joblib.load("models/random_forest_model.pkl")
+    return joblib.load("notebooks/models/random_forest_model.pkl")
 
 df = load_data()
 model = load_model()
 
 # -----------------------------
-# Risk Level Function
+# Logic Functions
 # -----------------------------
 def get_risk_level(p):
-    if p < 0.3:
-        return "Low Risk"
-    elif p < 0.7:
-        return "Medium Risk"
-    else:
-        return "High Risk"
-
-# -----------------------------
-# Title
-# -----------------------------
-st.title("🛒 E-commerce Customer Churn Prediction")
-st.write("Predict customer churn and get actionable business insights.")
+    if p < 0.3: return "Low Risk", "🟢"
+    elif p < 0.7: return "Medium Risk", "🟡"
+    else: return "High Risk", "🔴"
 
 # -----------------------------
 # Sidebar Navigation
 # -----------------------------
-st.sidebar.header("Navigation")
-section = st.sidebar.radio(
-    "Go to",
-    ["Overview", "Customer Insights", "Feature Importance", "Predict Churn"]
-)
+st.sidebar.title("Navigation 🧸🎀")
+section = st.sidebar.radio("Go to", ["Dashboard Overview", "Risk Predictor & Strategy"])
 
 # -----------------------------
-# Overview
+# Section 1: Dashboard Overview
 # -----------------------------
-if section == "Overview":
-    st.subheader("Overview")
+if section == "Dashboard Overview":
+    st.title("🛒 E-Commerce Health Dashboard")
+    st.write("Overview of customer retention and churn patterns.")
 
     total = len(df)
     churned = int(df["Churn"].sum())
-    active = total - churned
-    churn_rate = df["Churn"].mean() * 100
+    churn_rate = (churned / total) * 100
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Customers", total)
-    col2.metric("Churned", churned)
-    col3.metric("Active", active)
-    col4.metric("Churn Rate", f"{churn_rate:.2f}%")
+    # Layout Metrics
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Total Customers", f"{total:,}")
+    m2.metric("Churned", f"{churned:,}")
+    m3.metric("Churn Rate", f"{churn_rate:.2f}%", delta="-1.2%" if churn_rate < 20 else "High", delta_color="inverse")
 
     st.markdown("---")
 
-    fig, ax = plt.subplots()
-    counts = df["Churn"].value_counts().sort_index()
-    ax.bar(["Active", "Churned"], counts.values)
-    ax.set_title("Churn Distribution")
-    st.pyplot(fig)
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.subheader("Churn Distribution")
+        fig, ax = plt.subplots(figsize=(6, 4))
+        colors = ['#EAEAEA', '#D4AF37'] # Minimalist Gold/Grey
+        df["Churn"].value_counts().plot(kind='pie', autopct='%1.1f%%', ax=ax, colors=colors, startangle=90)
+        ax.set_ylabel("")
+        st.pyplot(fig)
+    
+    with col_b:
+        st.subheader("Top Factors Driving Churn")
+        importance_df = pd.DataFrame({
+            "Feature": ["Frequency", "TotalQuantity", "Monetary", "AvgOrderValue", "PurchaseIntensity", "CustomerLifetime"],
+            "Importance": model.feature_importances_
+        }).sort_values(by="Importance", ascending=True)
+        
+        fig, ax = plt.subplots(figsize=(6, 4))
+        ax.barh(importance_df["Feature"], importance_df["Importance"], color="#D4AF37")
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        st.pyplot(fig)
 
 # -----------------------------
-# Customer Insights
+# Section 2: Risk Predictor & Strategy
 # -----------------------------
-elif section == "Customer Insights":
-    st.subheader("Customer Insights")
+elif section == "Risk Predictor & Strategy":
+    st.title("🎯 Customer Risk Assessment")
+    st.write("Adjust customer behavior metrics to see real-time churn probability and business recommendations.")
 
-    feature = st.selectbox(
-        "Select Feature",
-        [
-            "Frequency",
-            "TotalQuantity",
-            "Monetary",
-            "AvgOrderValue",
-            "PurchaseIntensity",
-            "CustomerLifetime"
-        ]
-    )
+    # Input Area in a Container
+    with st.container():
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            frequency = st.number_input("Purchase Frequency", 1, 1000, 5)
+            avg_order = st.number_input("Avg Order Value ($)", 0.0, 10000.0, 50.0)
+        with c2:
+            monetary = st.number_input("Total Spending ($)", 0.0, 100000.0, 250.0)
+            intensity = st.number_input("Purchase Intensity", 0.0, 10.0, 0.5)
+        with c3:
+            lifetime = st.number_input("Customer Lifetime (Days)", 1, 3000, 150)
+            quantity = st.number_input("Total Quantity", 1, 10000, 30)
 
-    fig, ax = plt.subplots()
-    data_plot = [
-        df[df["Churn"] == 0][feature],
-        df[df["Churn"] == 1][feature]
-    ]
-
-    ax.boxplot(data_plot, labels=["Active", "Churned"])
-    ax.set_title(f"{feature} vs Churn")
-
-    st.pyplot(fig)
-
-# -----------------------------
-# Feature Importance
-# -----------------------------
-elif section == "Feature Importance":
-    st.subheader("Feature Importance")
-
-    features = [
-        "Frequency",
-        "TotalQuantity",
-        "Monetary",
-        "AvgOrderValue",
-        "PurchaseIntensity",
-        "CustomerLifetime"
-    ]
-
-    importance_df = pd.DataFrame({
-        "Feature": features,
-        "Importance": model.feature_importances_
-    }).sort_values(by="Importance", ascending=False)
-
-    fig, ax = plt.subplots()
-    ax.barh(importance_df["Feature"], importance_df["Importance"])
-    ax.invert_yaxis()
-
-    st.pyplot(fig)
-    st.dataframe(importance_df)
-
-# -----------------------------
-# Predict Churn
-# -----------------------------
-elif section == "Predict Churn":
-
-    st.subheader("Predict Customer Churn")
-
-    frequency = st.number_input("Frequency", 1, 1000, 5)
-    total_quantity = st.number_input("Total Quantity", 1, 10000, 20)
-    monetary = st.number_input("Monetary", 0.0, 100000.0, 200.0)
-    avg_order_value = st.number_input("Avg Order Value", 0.0, 10000.0, 40.0)
-    purchase_intensity = st.number_input("Purchase Intensity", 0.0, 10.0, 0.1)
-    customer_lifetime = st.number_input("Customer Lifetime", 1, 2000, 100)
-
-    input_df = pd.DataFrame({
+    # Data Preparation
+    input_data = pd.DataFrame({
         "Frequency": [frequency],
-        "TotalQuantity": [total_quantity],
+        "TotalQuantity": [quantity],
         "Monetary": [monetary],
-        "AvgOrderValue": [avg_order_value],
-        "PurchaseIntensity": [purchase_intensity],
-        "CustomerLifetime": [customer_lifetime]
+        "AvgOrderValue": [avg_order],
+        "PurchaseIntensity": [intensity],
+        "CustomerLifetime": [lifetime]
     })
 
-    st.write("### Input Preview")
-    st.dataframe(input_df)
+    # Prediction Logic (REACTIVE - NO BUTTON)
+    prob = model.predict_proba(input_data)[0][1]
+    risk_label, icon = get_risk_level(prob)
+    revenue_at_risk = prob * monetary
 
-    if st.button("Predict"):
+    st.markdown("---")
 
-        pred = model.predict(input_df)[0]
-        prob = model.predict_proba(input_df)[0][1]
-        risk = get_risk_level(prob)
+    # Results Display
+    res1, res2, res3 = st.columns(3)
+    res1.metric("Churn Probability", f"{prob:.1%}")
+    res2.metric("Risk Status", f"{icon} {risk_label}")
+    res3.metric("Revenue at Risk", f"${revenue_at_risk:.2f}", help="Probability * Total Spending")
 
-        st.markdown("---")
-        st.subheader("Prediction Result")
-
-        st.write(f"Churn Probability: {prob:.2%}")
-        st.write(f"Risk Level: {risk}")
-
-        # 🔥 ACTION LAYER
-        if risk == "High Risk":
-            st.error("🔴 High Risk Customer")
-
-            st.markdown("""
-            **Insight:**
-            - Low engagement behavior  
-            - Likely to churn soon  
-
-            **Action:**
-            - Offer discount  
-            - Personal follow-up  
-            - Re-engagement campaign  
-            """)
-
-        elif risk == "Medium Risk":
-            st.warning("🟡 Medium Risk Customer")
-
-            st.markdown("""
-            **Insight:**
-            - Engagement decreasing  
-
-            **Action:**
-            - Send reminders  
-            - Offer incentives  
-            """)
-
-        else:
-            st.success("🟢 Low Risk Customer")
-
-            st.markdown("""
-            **Insight:**
-            - Active customer  
-
-            **Action:**
-            - Upsell products  
-            - Loyalty rewards  
-            """)
+    # Actionable Insights Expansion
+    st.subheader("💡 Business Strategy")
+    
+    if risk_label == "High Risk":
+        st.error("Priority 1: Immediate Outreach Required")
+        st.write("""
+        - **Why:** This customer shows patterns of detachment (low intensity/lifetime).
+        - **Action:** Send a high-value 'We Miss You' coupon (20-30% off).
+        - **Personalize:** Have a support agent check if there were issues with their last order.
+        """)
+    elif risk_label == "Medium Risk":
+        st.warning("Priority 2: Re-engagement Campaign")
+        st.write("""
+        - **Why:** Engagement is slipping but they haven't left yet.
+        - **Action:** Send personalized product recommendations based on their history.
+        - **Incentive:** Offer free shipping on their next order.
+        """)
+    else:
+        st.success("Priority 3: Retention & Growth")
+        st.write("""
+        - **Why:** Highly active and loyal customer.
+        - **Action:** Enroll them in the VIP/Loyalty program.
+        - **Strategy:** Focus on Upselling higher-margin products.
+        """)
