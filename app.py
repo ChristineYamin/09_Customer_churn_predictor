@@ -1,155 +1,177 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 import joblib
+import matplotlib.pyplot as plt
 
-# -----------------------------
-# Page Config (Minimalist & Wide)
-# -----------------------------
-st.set_page_config(page_title="Customer Churn Intelligence", layout="wide")
+#-------------------------------
+# 1. PAGE CONFIG AND STYLING
+#-------------------------------
+st.set_page_config(page_title="Customer Churn Predictor", layout="wide")
 
-# Custom CSS for a cleaner look
-st.markdown("""
-    <style>
-    .main { background-color: #fcfcfc; }
-    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; border: 1px solid #f0f0f0; }
-    </style>
-    """, unsafe_index=True)
-
-# -----------------------------
-# Load Data and Model
-# -----------------------------
-@st.cache_data
-def load_data():
-    # Update these to relative paths for easier deployment later!
-    return pd.read_csv("data/final_churn_dataset.csv", index_col=0)
-
+#---------------------------
+# 2. DATA AND MODEL LOADING
+#----------------------------
 @st.cache_resource
-def load_model():
-    return joblib.load("notebooks/models/random_forest_model.pkl")
+def load_assets():
+    model = joblib.load("C:/Projects/09_Customer_churn_predictor/notebooks/models/random_forest_model.pkl")
+    df = pd.read_csv("C:/Projects/09_Customer_churn_predictor/data/final_churn_dataset.csv", index_col=0)
+    return model, df
 
-df = load_data()
-model = load_model()
+try:
+    model,df = load_assets()
+except Exception as e:
+    st.error(f"Error loading assets: {e}")
+    st.stop()
 
-# -----------------------------
-# Logic Functions
-# -----------------------------
-def get_risk_level(p):
-    if p < 0.3: return "Low Risk", "🟢"
-    elif p < 0.7: return "Medium Risk", "🟡"
-    else: return "High Risk", "🔴"
+#---------------------------------------
+# 3. SIDEBAR NAVIGATION
+#--------------------------------------
+st.sidebar.title("Project #9: Customer Churn")
+st.sidebar.markdown("---")
+menu = st.sidebar.radio("Navigation", ["Global Overview", "Individual Risk Predictor"])
 
-# -----------------------------
-# Sidebar Navigation
-# -----------------------------
-st.sidebar.title("Navigation 🧸🎀")
-section = st.sidebar.radio("Go to", ["Dashboard Overview", "Risk Predictor & Strategy"])
+#---------------------
+# FUNCTION: GET RISK DATA
+#----------------------------------
+def get_risk_analysis(prob):
+    if prob < 0.3:
+        return "Low Risk", "🟢", "Retention and Upsell", "Keep providing value through loyalty rewards."
+    elif prob < 0.7:
+        return "Medium Risk", "🟡", "Engagement Campaign", "Send personalized recommendations to bring them back."
+    else:
+        return "High Risk", "🔴", "Crisis Intervention", "Immediate high-value discount (25%+) required."
+    
+#---------------------------------------------
+# SECTION: GLOBAL OVERVIEW
+#--------------------------------------------
+if menu == "Global Overview":
+    st.title("📊 Business Health Overview")
 
-# -----------------------------
-# Section 1: Dashboard Overview
-# -----------------------------
-if section == "Dashboard Overview":
-    st.title("🛒 E-Commerce Health Dashboard")
-    st.write("Overview of customer retention and churn patterns.")
+    avg_churn = df["Churn"].mean()
+    total_rev_at_risk = (df["Churn"] * df["Monetary"]).sum()
 
-    total = len(df)
-    churned = int(df["Churn"].sum())
-    churn_rate = (churned / total) * 100
-
-    # Layout Metrics
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Total Customers", f"{total:,}")
-    m2.metric("Churned", f"{churned:,}")
-    m3.metric("Churn Rate", f"{churn_rate:.2f}%", delta="-1.2%" if churn_rate < 20 else "High", delta_color="inverse")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Customers", len(df))
+    col2.metric("Market Churn Rate", f"{avg_churn: .1%}")
+    col3.metric("Curreny Lost Revenue", f"{total_rev_at_risk:,.2f}")
 
     st.markdown("---")
+    st.subheader("What Drives Churn Globally?")
 
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.subheader("Churn Distribution")
-        fig, ax = plt.subplots(figsize=(6, 4))
-        colors = ['#EAEAEA', '#D4AF37'] # Minimalist Gold/Grey
-        df["Churn"].value_counts().plot(kind='pie', autopct='%1.1f%%', ax=ax, colors=colors, startangle=90)
-        ax.set_ylabel("")
-        st.pyplot(fig)
-    
-    with col_b:
-        st.subheader("Top Factors Driving Churn")
-        importance_df = pd.DataFrame({
-            "Feature": ["Frequency", "TotalQuantity", "Monetary", "AvgOrderValue", "PurchaseIntensity", "CustomerLifetime"],
-            "Importance": model.feature_importances_
-        }).sort_values(by="Importance", ascending=True)
-        
-        fig, ax = plt.subplots(figsize=(6, 4))
-        ax.barh(importance_df["Feature"], importance_df["Importance"], color="#D4AF37")
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        st.pyplot(fig)
+    # Feature Importance Insight
+    importances = model.feature_importances_
+    features = ["Frequency", "TotalQuantity", "Monetary", "AvgOrderValue", "PurchaseIntensity", "CustomerLifetime"]
+    feat_df = pd.DataFrame({"Feature": features, "Importance": importances}).sort_values("Importance", ascending=True)
 
-# -----------------------------
-# Section 2: Risk Predictor & Strategy
-# -----------------------------
-elif section == "Risk Predictor & Strategy":
-    st.title("🎯 Customer Risk Assessment")
-    st.write("Adjust customer behavior metrics to see real-time churn probability and business recommendations.")
+    fig, ax = plt.subplots(figsize=(10,4))
+    ax.barh(feat_df["Feature"], feat_df["Importance"], color="#d4af37")
+    ax.set_title("Key Drivers if Customer Loss")
+    st.pyplot(fig)
 
-    # Input Area in a Container
+#-------------------------------------------------
+# SECTION: INDIVIDUAL PREDICTOR (The 4 Insights)
+#---------------------------------------------------
+else:
+    st.title("🎯 Individual Customer Intelligence")
+    st.write("Calculate exactly who is leaving and why.")
+
+    # Input Section
     with st.container():
         c1, c2, c3 = st.columns(3)
         with c1:
-            frequency = st.number_input("Purchase Frequency", 1, 1000, 5)
-            avg_order = st.number_input("Avg Order Value ($)", 0.0, 10000.0, 50.0)
+            freq = st.number_input("Frequency", 1,500,10)
+            aov = st.number_input("Avg Order Value ($)", 0.0, 5000.0, 100.0)
         with c2:
-            monetary = st.number_input("Total Spending ($)", 0.0, 100000.0, 250.0)
-            intensity = st.number_input("Purchase Intensity", 0.0, 10.0, 0.5)
+            monetary = st.number_input("Total Spending ($)", 0.0, 50000.0, 1000.0)
+            intensity = st.number_input("Purchase Intensity", 0.0, 5.0, 0.5)
         with c3:
-            lifetime = st.number_input("Customer Lifetime (Days)", 1, 3000, 150)
-            quantity = st.number_input("Total Quantity", 1, 10000, 30)
+            lifetime = st.number_input("Customer Lifetime (Days)", 1, 2000, 365)
+            quantity = st.number_input("Total Quantity", 1,5000, 50)
+    
+    # Prepare Data for model
 
-    # Data Preparation
-    input_data = pd.DataFrame({
-        "Frequency": [frequency],
-        "TotalQuantity": [quantity],
-        "Monetary": [monetary],
-        "AvgOrderValue": [avg_order],
-        "PurchaseIntensity": [intensity],
-        "CustomerLifetime": [lifetime]
-    })
+    data_row = [freq, quantity, monetary, aov, intensity, lifetime]
 
-    # Prediction Logic (REACTIVE - NO BUTTON)
-    prob = model.predict_proba(input_data)[0][1]
-    risk_label, icon = get_risk_level(prob)
-    revenue_at_risk = prob * monetary
+    input_df = pd.DataFrame([data_row], columns=["Frequency", "TotalQuantity", "Monetary", 
+                                 "AvgOrderValue", "PurchaseIntensity", "CustomerLifetime"])
+
+    # Calculations
+    prob = model.predict_proba(input_df)[0][1]
+    risk_label, icon, strategy, action = get_risk_analysis(prob)
+    rev_at_risk = prob * monetary
 
     st.markdown("---")
 
-    # Results Display
+    # The four insights display
+    st.subheader("Prediction Results")
     res1, res2, res3 = st.columns(3)
-    res1.metric("Churn Probability", f"{prob:.1%}")
-    res2.metric("Risk Status", f"{icon} {risk_label}")
-    res3.metric("Revenue at Risk", f"${revenue_at_risk:.2f}", help="Probability * Total Spending")
 
-    # Actionable Insights Expansion
-    st.subheader("💡 Business Strategy")
-    
-    if risk_label == "High Risk":
-        st.error("Priority 1: Immediate Outreach Required")
-        st.write("""
-        - **Why:** This customer shows patterns of detachment (low intensity/lifetime).
-        - **Action:** Send a high-value 'We Miss You' coupon (20-30% off).
-        - **Personalize:** Have a support agent check if there were issues with their last order.
-        """)
-    elif risk_label == "Medium Risk":
-        st.warning("Priority 2: Re-engagement Campaign")
-        st.write("""
-        - **Why:** Engagement is slipping but they haven't left yet.
-        - **Action:** Send personalized product recommendations based on their history.
-        - **Incentive:** Offer free shipping on their next order.
-        """)
+    #Insight 1: Probability Score
+    res1.metric("Churn Probability", f"{prob:.1%}")
+
+    # Insight 2: Risk Label
+    res2.metric("Risk Level", f"{icon} {risk_label}")
+
+    # Insight 3: Revenue at Risk
+    res3.metric("Potential Loss", f"{rev_at_risk:.2f}", delta_color="inverse")
+
+    st.markdown("---")
+
+    # Insight 4: Prescriptive Action and "Why"
+    st.subheader("Prescriptive Strategy")
+
+    col_left, col_right = st.columns([1,2])
+
+    with col_left:
+        st.info(f"**Strategy:** {strategy}")
+
+    with col_right:
+        st.write(f"**Targeted Action:** {action}")
+
+        # simple "Why" logic (Heuristic based on inputs)
+        if intensity < 0.2:
+            st.write("- Critical drop in purchase intensity detected.")
+        if lifetime > 500 and prob > 0.5:
+            st.write("- Long-term customer showing signs of 'fatigue'.")
+        if freq < 3:
+            st.write("- Customer has not yet established a habitual buying pattern.")
+
+#---------------------------------------
+# SECTION : THE "HUMAN-FRIENDLY" REPORT 
+#---------------------------------------------
+st.markdown("---")
+st.header("📋 Customer Diagnostic Report")
+
+# Top Row: The Big Picture
+col_a, col_b = st.columns(2)
+
+with col_a:
+    # Insight 1: Visual Status
+    if prob > 0.7:
+        st.error(f"### 🔴 Status: High Risk of Leaving")
+    elif prob > 0.3:
+        st.warning(f"### 🟡 Status: Showing Signs of Fading")
     else:
-        st.success("Priority 3: Retention & Growth")
-        st.write("""
-        - **Why:** Highly active and loyal customer.
-        - **Action:** Enroll them in the VIP/Loyalty program.
-        - **Strategy:** Focus on Upselling higher-margin products.
-        """)
+        st.success(f"### 🟢 Status: Healthy & Active")
+
+with col_b:
+    # Insight 2: Money Impact
+    st.metric("Estimated Revenue at Risk", f"${rev_at_risk:,.2f}", 
+              help="The potential financial loss if this customer stops buying.")
+
+# Bottom Row: The "Why" and "What Next"
+diag_col, action_col = st.columns(2)
+
+with diag_col:
+    st.subheader("🧐 Why this rating?")
+    if intensity < 0.3:
+        st.write("• **Activity Drop:** They are shopping much slower than usual.")
+    if freq < 3:
+        st.write("• **New User:** They haven't established a strong loyalty pattern yet.")
+    if prob < 0.3:
+        st.write("• **Consistent:** Their shopping habits are very stable.")
+
+with action_col:
+    st.subheader("🛠️ Suggested Next Step")
+    # This matches the Prescriptive Action insight
+    st.info(f"**Recommendation:** {action}")
